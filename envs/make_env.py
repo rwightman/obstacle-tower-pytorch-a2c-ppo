@@ -10,6 +10,7 @@ from helpers.monitor import Monitor
 from helpers.atari_wrappers import make_atari, wrap_deepmind
 from helpers.vec_env import VecEnvWrapper
 from helpers.vec_env.dummy_vec_env import DummyVecEnv
+from helpers.vec_env.shmem_vec_env import ShmemVecEnv
 from helpers.vec_env.subproc_vec_env import SubprocVecEnv
 from helpers.vec_env.vec_normalize import VecNormalize
 
@@ -29,25 +30,29 @@ except ImportError:
     pass
 
 try:
-    import envs.pommerman
+    import envs.obt
 except ImportError:
     pass
 
 
 def make_env(env_id, seed, rank, log_dir=None, add_timestep=False, allow_early_resets=False):
     def _thunk():
-        if env_id.startswith("Pomme"):
-            env = envs.pommerman.make_env(env_id)
+        if env_id.startswith("obt"):
+            env = envs.obt.make_env(env_id, rank)
         elif env_id.startswith("dm"):
             _, domain, task = env_id.split('.')
             env = dm_control2gym.make(domain_name=domain, task_name=task)
         else:
             env = gym.make(env_id)
-        is_atari = hasattr(gym.envs, 'atari') and isinstance(
-            env.unwrapped, gym.envs.atari.atari_env.AtariEnv)
+
+        is_atari = hasattr(gym.envs, 'atari') and isinstance(env.unwrapped, gym.envs.atari.atari_env.AtariEnv)
         if is_atari:
             env = make_atari(env_id)
-        env.seed(seed + rank)
+
+        if seed is not None:
+            env.seed(seed + rank)
+        else:
+            env.seed(None)
 
         obs_shape = env.observation_space.shape
         if add_timestep and len(
@@ -55,8 +60,7 @@ def make_env(env_id, seed, rank, log_dir=None, add_timestep=False, allow_early_r
             env = AddTimestep(env)
 
         if log_dir is not None:
-            env = Monitor(env, os.path.join(log_dir, str(rank)),
-                          allow_early_resets=allow_early_resets)
+            env = Monitor(env, os.path.join(log_dir, str(rank)), allow_early_resets=allow_early_resets)
 
         if is_atari:
             env = wrap_deepmind(env)
@@ -71,14 +75,19 @@ def make_env(env_id, seed, rank, log_dir=None, add_timestep=False, allow_early_r
     return _thunk
 
 
-def make_vec_envs(env_name, seed, num_processes, gamma, no_norm, num_stack,
-                  log_dir=None, add_timestep=False, device='cpu', allow_early_resets=False, eval=False):
+def make_vec_envs(
+        env_name, seed, num_processes, gamma, no_norm, num_stack,
+        log_dir=None, add_timestep=False, device='cpu', allow_early_resets=False,
+        eval=False, shmem=True):
 
     envs = [make_env(env_name, seed, i, log_dir, add_timestep, allow_early_resets)
                 for i in range(num_processes)]
 
     if len(envs) > 1:
-        envs = SubprocVecEnv(envs)
+        if shmem:
+            envs = ShmemVecEnv(envs, context='fork')
+        else:
+            envs = SubprocVecEnv(envs)
     else:
         envs = DummyVecEnv(envs)
 
@@ -91,8 +100,9 @@ def make_vec_envs(env_name, seed, num_processes, gamma, no_norm, num_stack,
             # An ugly hack to remove updates
             def _obfilt(self, obs):
                 if self.ob_rms:
-                    obs = np.clip((obs - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon),
-                                  -self.clipob, self.clipob)
+                    obs = np.clip(
+                        (obs - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon),
+                        -self.clipob, self.clipob)
                     return obs
                 else:
                     return obs
@@ -142,7 +152,7 @@ class VecPyTorch(VecEnvWrapper):
 
     def reset(self):
         obs = self.venv.reset()
-        obs = torch.from_numpy(obs).float().to(self.device)
+        obs = torch.from_numpy(obs).to(self.device, dtype=torch.float32)
         return obs
 
     def step_async(self, actions):
@@ -151,8 +161,8 @@ class VecPyTorch(VecEnvWrapper):
 
     def step_wait(self):
         obs, reward, done, info = self.venv.step_wait()
-        obs = torch.from_numpy(obs).float().to(self.device)
-        reward = torch.from_numpy(np.expand_dims(np.stack(reward), 1)).float()
+        obs = torch.from_numpy(obs).to(self.device, dtype=torch.float32)
+        reward = torch.from_numpy(reward).unsqueeze(dim=1).float()
         return obs, reward, done, info
 
 
@@ -166,26 +176,26 @@ class VecPyTorchFrameStack(VecEnvWrapper):
         self.shape_dim0 = wos.low.shape[0]
         low = np.repeat(wos.low, self.nstack, axis=0)
         high = np.repeat(wos.high, self.nstack, axis=0)
-        self.stackedobs = np.zeros((venv.num_envs,) + low.shape)
-        self.stackedobs = torch.from_numpy(self.stackedobs).float()
-        self.stackedobs = self.stackedobs.to(device)
+        self.stacked_obs = np.zeros((venv.num_envs,) + low.shape)
+        self.stacked_obs = torch.from_numpy(self.stacked_obs).float()
+        self.stacked_obs = self.stacked_obs.to(device)
         observation_space = gym.spaces.Box(low=low, high=high, dtype=venv.observation_space.dtype)
         VecEnvWrapper.__init__(self, venv, observation_space=observation_space)
 
     def step_wait(self):
         obs, rews, news, infos = self.venv.step_wait()
-        self.stackedobs[:, :-self.shape_dim0] = self.stackedobs[:, self.shape_dim0:]
+        self.stacked_obs[:, :-self.shape_dim0] = self.stacked_obs[:, self.shape_dim0:]
         for (i, new) in enumerate(news):
             if new:
-                self.stackedobs[i] = 0
-        self.stackedobs[:, -self.shape_dim0:] = obs
-        return self.stackedobs, rews, news, infos
+                self.stacked_obs[i] = 0
+        self.stacked_obs[:, -self.shape_dim0:] = obs
+        return self.stacked_obs, rews, news, infos
 
     def reset(self):
         obs = self.venv.reset()
-        self.stackedobs.fill_(0)
-        self.stackedobs[:, -self.shape_dim0:] = obs
-        return self.stackedobs
+        self.stacked_obs.fill_(0)
+        self.stacked_obs[:, -self.shape_dim0:] = obs
+        return self.stacked_obs
 
     def close(self):
         self.venv.close()

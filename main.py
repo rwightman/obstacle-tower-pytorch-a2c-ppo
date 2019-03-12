@@ -62,10 +62,11 @@ def main():
         args.log_dir, args.add_timestep, device, allow_early_resets=False)
 
     if args.eval_interval:
+        eval_seed = args.seed if args.seed is None else args.seed + args.num_processes
         eval_envs = make_vec_envs(
-            args.env_name, args.seed + args.num_processes, args.num_processes, args.gamma,
-            args.no_norm, args.num_stack, eval_log_dir, args.add_timestep, device,
-            allow_early_resets=True, eval=True)
+            args.env_name, eval_seed, args.num_processes, args.gamma,
+            args.no_norm, args.num_stack, eval_log_dir, args.add_timestep,
+            device=device, allow_early_resets=True, eval=True)
 
         if eval_envs.venv.__class__.__name__ == "VecNormalize":
             eval_envs.venv.ob_rms = train_envs.venv.ob_rms
@@ -76,7 +77,7 @@ def main():
     actor_critic = create_policy(
         train_envs.observation_space,
         train_envs.action_space,
-        name='pomm',
+        name='basic',
         nn_kwargs={
             'batch_norm': False if args.algo == 'acktr' else True,
             'recurrent': args.recurrent_policy,
@@ -88,21 +89,30 @@ def main():
 
     if args.algo.startswith('a2c'):
         agent = algo.A2C_ACKTR(
-            actor_critic, args.value_loss_coef,
+            actor_critic,
+            args.value_loss_coef,
             args.entropy_coef,
-            lr=args.lr, lr_schedule=lr_update_schedule,
-            eps=args.eps, alpha=args.alpha,
+            lr=args.lr,
+            lr_schedule=lr_update_schedule,
+            eps=args.eps,
+            alpha=args.alpha,
             max_grad_norm=args.max_grad_norm)
     elif args.algo.startswith('ppo'):
         agent = algo.PPO(
-            actor_critic, args.clip_param, args.ppo_epoch, args.num_mini_batch,
-            args.value_loss_coef, args.entropy_coef,
-            lr=args.lr, lr_schedule=lr_update_schedule,
+            actor_critic,
+            args.clip_param,
+            args.ppo_epoch,
+            args.num_mini_batch,
+            args.value_loss_coef,
+            args.entropy_coef,
+            lr=args.lr,
+            lr_schedule=lr_update_schedule,
             eps=args.eps,
             max_grad_norm=args.max_grad_norm)
     elif args.algo == 'acktr':
         agent = algo.A2C_ACKTR(
-            actor_critic, args.value_loss_coef,
+            actor_critic,
+            args.value_loss_coef,
             args.entropy_coef,
             acktr=True)
 
@@ -127,7 +137,8 @@ def main():
         replay = None
 
     rollouts = RolloutStorage(
-        args.num_steps, args.num_processes,
+        args.num_steps,
+        args.num_processes,
         train_envs.observation_space.shape,
         train_envs.action_space,
         actor_critic.recurrent_hidden_state_size)
@@ -189,8 +200,9 @@ def main():
             if args.cuda:
                 save_model = copy.deepcopy(actor_critic).cpu()
 
-            save_model = [save_model.state_dict(),
-                            hasattr(train_envs.venv, 'ob_rms') and train_envs.venv.ob_rms or None]
+            save_model = [
+                save_model.state_dict(),
+                hasattr(train_envs.venv, 'ob_rms') and train_envs.venv.ob_rms or None]
 
             torch.save(save_model, os.path.join(save_path, args.env_name + ".pt"))
 
@@ -218,8 +230,8 @@ def main():
             eval_episode_rewards = []
 
             obs = eval_envs.reset()
-            eval_recurrent_hidden_states = torch.zeros(args.num_processes,
-                            actor_critic.recurrent_hidden_state_size, device=device)
+            eval_recurrent_hidden_states = torch.zeros(
+                args.num_processes, actor_critic.recurrent_hidden_state_size, device=device)
             eval_masks = torch.zeros(args.num_processes, 1, device=device)
 
             while len(eval_episode_rewards) < 50:
