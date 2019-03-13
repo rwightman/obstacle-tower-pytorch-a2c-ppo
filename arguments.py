@@ -53,13 +53,13 @@ def get_args():
                         help='number of frames to stack (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10,
                         help='log interval, one log per n updates (default: 10)')
-    parser.add_argument('--save-interval', type=int, default=100,
+    parser.add_argument('--save-interval', type=int, default=1000,
                         help='save interval, one save per n updates (default: 100)')
-    parser.add_argument('--eval-interval', type=int, default=1000,
+    parser.add_argument('--eval-interval', type=int, default=10000,
                         help='eval interval, one eval per n updates (default: None)')
-    parser.add_argument('--vis-interval', type=int, default=100,
+    parser.add_argument('--vis-interval', type=int, default=1000,
                         help='vis interval, one log per n updates (default: 100)')
-    parser.add_argument('--num-frames', type=int, default=5e7,
+    parser.add_argument('--num-frames', type=int, default=10e7,
                         help='number of frames to train (default: 5e7)')
     parser.add_argument('--env-name', default='PongNoFrameskip-v4',
                         help='environment to train on (default: PongNoFrameskip-v4)')
@@ -73,7 +73,7 @@ def get_args():
                         help='add timestep to observations')
     parser.add_argument('--recurrent-policy', action='store_true', default=False,
                         help='use a recurrent policy')
-    parser.add_argument('--no-vis', action='store_true', default=False,
+    parser.add_argument('--no-vis', action='store_true', default=True,
                         help='disables visdom visualization')
     parser.add_argument('--port', type=int, default=8097,
                         help='port to run the server on (default: 8097)')

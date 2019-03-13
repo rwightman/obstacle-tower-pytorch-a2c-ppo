@@ -78,9 +78,9 @@ def make_env(env_id, seed, rank, log_dir=None, add_timestep=False, allow_early_r
 def make_vec_envs(
         env_name, seed, num_processes, gamma, no_norm, num_stack,
         log_dir=None, add_timestep=False, device='cpu', allow_early_resets=False,
-        eval=False, shmem=True):
+        eval=False, shmem=False, rank_offsest=0):
 
-    envs = [make_env(env_name, seed, i, log_dir, add_timestep, allow_early_resets)
+    envs = [make_env(env_name, seed, i + rank_offsest, log_dir, add_timestep, allow_early_resets)
                 for i in range(num_processes)]
 
     if len(envs) > 1:

@@ -27,10 +27,11 @@ update_factor = args.num_steps * args.num_processes
 num_updates = int(args.num_frames) // update_factor
 lr_update_schedule = None if args.lr_schedule is None else args.lr_schedule // update_factor
 
-torch.manual_seed(args.seed)
-if args.cuda:
-    torch.cuda.manual_seed(args.seed)
-np.random.seed(args.seed)
+if args.seed is not None:
+    torch.manual_seed(args.seed)
+    if args.cuda:
+        torch.cuda.manual_seed(args.seed)
+    np.random.seed(args.seed)
 
 try:
     os.makedirs(args.log_dir)
@@ -64,9 +65,9 @@ def main():
     if args.eval_interval:
         eval_seed = args.seed if args.seed is None else args.seed + args.num_processes
         eval_envs = make_vec_envs(
-            args.env_name, eval_seed, args.num_processes, args.gamma,
+            args.env_name, eval_seed, args.num_processes // 2, args.gamma,
             args.no_norm, args.num_stack, eval_log_dir, args.add_timestep,
-            device=device, allow_early_resets=True, eval=True)
+            device=device, allow_early_resets=True, eval=True, rank_offsest=args.num_processes)
 
         if eval_envs.venv.__class__.__name__ == "VecNormalize":
             eval_envs.venv.ob_rms = train_envs.venv.ob_rms
@@ -79,7 +80,7 @@ def main():
         train_envs.action_space,
         name='basic',
         nn_kwargs={
-            'batch_norm': False if args.algo == 'acktr' else True,
+            #'batch_norm': False if args.algo == 'acktr' else True,
             'recurrent': args.recurrent_policy,
             'hidden_size': 512,
         },
