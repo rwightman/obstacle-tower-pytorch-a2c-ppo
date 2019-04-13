@@ -4,7 +4,7 @@ from distributions import Categorical, DiagGaussian
 
 
 class Policy(nn.Module):
-    def __init__(self, nn, action_space):
+    def __init__(self, nn, action_space, noisy_net=False):
         super(Policy, self).__init__()
 
         assert isinstance(nn, torch.nn.Module)
@@ -12,7 +12,7 @@ class Policy(nn.Module):
 
         if action_space.__class__.__name__ == "Discrete":
             num_outputs = action_space.n
-            self.dist = Categorical(self.nn.output_size, num_outputs)
+            self.dist = Categorical(self.nn.output_size, num_outputs, noisy=noisy_net)
         elif action_space.__class__.__name__ == "Box":
             num_outputs = action_space.shape[0]
             self.dist = DiagGaussian(self.nn.output_size, num_outputs)
@@ -57,3 +57,7 @@ class Policy(nn.Module):
         dist_entropy = dist.entropy().mean()
 
         return value, action_log_probs, dist_entropy, rnn_hxs
+
+    def reset_noise(self):
+        self.nn.reset_noise()
+        self.dist.reset_noise()

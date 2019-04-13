@@ -7,7 +7,7 @@ def get_args():
     parser = argparse.ArgumentParser(description='RL')
     parser.add_argument('--algo', default='a2c',
                         help='algorithm to use: a2c | ppo | acktr')
-    parser.add_argument('--lr', type=float, default=2.5e-4,
+    parser.add_argument('--lr', type=float, default=3e-4,
                         help='learning rate (default: 2.5e-4)')
     parser.add_argument('--lr-schedule', type=float, default=None,
                         help='learning rate step schedule (default: None)')
@@ -17,7 +17,7 @@ def get_args():
                         help='RMSprop optimizer apha (default: 0.99)')
     parser.add_argument('--gamma', type=float, default=0.99,
                         help='discount factor for rewards (default: 0.99)')
-    parser.add_argument('--use-gae', action='store_true', default=False,
+    parser.add_argument('--use-gae', action='store_true', default=True,
                         help='use generalized advantage estimation')
     parser.add_argument('--tau', type=float, default=0.95,
                         help='gae parameter (default: 0.95)')
@@ -31,8 +31,8 @@ def get_args():
                         help='random seed (default: None (random))')
     parser.add_argument('--num-processes', type=int, default=16,
                         help='how many training CPU processes to use (default: 16)')
-    parser.add_argument('--num-steps', type=int, default=5,
-                        help='number of forward steps in A2C (default: 5)')
+    parser.add_argument('--num-steps', type=int, default=20,
+                        help='number of forward steps in A2C (default: 20)')
     parser.add_argument('--ppo-epoch', type=int, default=4,
                         help='number of ppo epochs (default: 4)')
     parser.add_argument('--num-mini-batch', type=int, default=32,
@@ -59,7 +59,7 @@ def get_args():
                         help='eval interval, one eval per n updates (default: None)')
     parser.add_argument('--vis-interval', type=int, default=1000,
                         help='vis interval, one log per n updates (default: 100)')
-    parser.add_argument('--num-frames', type=int, default=10e7,
+    parser.add_argument('--num-frames', type=int, default=10e8,
                         help='number of frames to train (default: 5e7)')
     parser.add_argument('--env-name', default='PongNoFrameskip-v4',
                         help='environment to train on (default: PongNoFrameskip-v4)')

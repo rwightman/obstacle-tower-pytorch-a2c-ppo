@@ -17,7 +17,7 @@ class ReplayStorage:
         self.device = device
 
         # stored episode data
-        self.obs = torch.zeros(self.max_steps, *obs_shape)
+        self.obs = torch.zeros(self.max_steps, *obs_shape).byte()
         self.recurrent_hidden_states = torch.zeros(self.max_steps, recurrent_hidden_state_size)
         self.returns = torch.zeros(self.max_steps, 1)
         if action_space.__class__.__name__ == 'Discrete':

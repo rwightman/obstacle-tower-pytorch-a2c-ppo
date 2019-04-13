@@ -166,7 +166,7 @@ class PommNet(NNBase):
         #x = x_conv + x_mlp
 
         if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+            x, rnn_hxs = self._forward_rnn(x, rnn_hxs, masks)
 
         out_actor = self.actor(x)
         out_value = self.critic(x)

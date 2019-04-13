@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils import AddBias, init, init_normc_
+from models.noisy import create_linear
 
 """
 Modify standard PyTorch distributions so they are compatible with this code.
@@ -31,19 +32,22 @@ FixedNormal.mode = lambda self: self.mean
 
 
 class Categorical(nn.Module):
-    def __init__(self, num_inputs, num_outputs):
+    def __init__(self, num_inputs, num_outputs, noisy=False):
         super(Categorical, self).__init__()
 
-        init_ = lambda m: init(m,
-              nn.init.orthogonal_,
-              lambda x: nn.init.constant_(x, 0),
-              gain=0.01)
-
-        self.linear = init_(nn.Linear(num_inputs, num_outputs))
+        self.linear = create_linear(num_inputs, num_outputs, noisy, std=0.1)
+        if not noisy:
+            nn.init.orthogonal_(self.linear.weight, gain=0.01)
+            nn.init.zeros_(self.linear.bias)
+        else:
+            nn.init.orthogonal_(self.linear.weight_mu, gain=0.01)
 
     def forward(self, x):
         x = self.linear(x)
         return FixedCategorical(logits=x)
+
+    def reset_noise(self):
+        self.linear.reset_noise()
 
 
 class DiagGaussian(nn.Module):

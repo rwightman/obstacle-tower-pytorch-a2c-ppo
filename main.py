@@ -65,7 +65,7 @@ def main():
     if args.eval_interval:
         eval_seed = args.seed if args.seed is None else args.seed + args.num_processes
         eval_envs = make_vec_envs(
-            args.env_name, eval_seed, args.num_processes // 2, args.gamma,
+            args.env_name, eval_seed, args.num_processes // 4, args.gamma,
             args.no_norm, args.num_stack, eval_log_dir, args.add_timestep,
             device=device, allow_early_resets=True, eval=True, rank_offsest=args.num_processes)
 
@@ -74,16 +74,20 @@ def main():
     else:
         eval_envs = None
 
-    # FIXME this is very specific to Pommerman env right now
+    print(train_envs.observation_space.shape)
+
+    noisy_net = True
+
     actor_critic = create_policy(
         train_envs.observation_space,
         train_envs.action_space,
         name='basic',
         nn_kwargs={
             #'batch_norm': False if args.algo == 'acktr' else True,
-            'recurrent': args.recurrent_policy,
+            'recurrent': 'lstm' if args.recurrent_policy else '',
             'hidden_size': 512,
         },
+        noisy_net=noisy_net,
         train=True)
 
     actor_critic.to(device)
@@ -126,7 +130,7 @@ def main():
             value_loss_coef=args.sil_value_loss_coef or args.value_loss_coef,
             entropy_coef=args.sil_entropy_coef or args.entropy_coef)
         replay = ReplayStorage(
-            5e5,
+            1e5,
             args.num_processes,
             args.gamma,
             0.1,
@@ -149,9 +153,12 @@ def main():
     rollouts.to(device)
 
     episode_rewards = deque(maxlen=10)
-    
+
     start = time.time()
     for j in range(num_updates):
+        if noisy_net:
+            actor_critic.reset_noise()
+
         for step in range(args.num_steps):
             # Sample actions
             with torch.no_grad():
@@ -228,12 +235,14 @@ def main():
                 ))
 
         if args.eval_interval and len(episode_rewards) > 1 and j > 0 and j % args.eval_interval == 0:
-            eval_episode_rewards = []
+            actor_critic.eval()
 
+            eval_episode_rewards = []
+            num_eval_processes = args.num_processes//4
             obs = eval_envs.reset()
             eval_recurrent_hidden_states = torch.zeros(
-                args.num_processes, actor_critic.recurrent_hidden_state_size, device=device)
-            eval_masks = torch.zeros(args.num_processes, 1, device=device)
+                2, num_eval_processes, actor_critic.recurrent_hidden_state_size, device=device)
+            eval_masks = torch.zeros(num_eval_processes, 1, device=device)
 
             while len(eval_episode_rewards) < 50:
                 with torch.no_grad():
@@ -249,6 +258,8 @@ def main():
 
             print(" Evaluation using {} episodes: mean reward {:.5f}\n".
                 format(len(eval_episode_rewards), np.mean(eval_episode_rewards)))
+
+            actor_critic.train()
 
         if args.vis and j % args.vis_interval == 0:
             try:
