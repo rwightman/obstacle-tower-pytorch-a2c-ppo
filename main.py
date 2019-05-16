@@ -90,6 +90,11 @@ def main():
         noisy_net=noisy_net,
         train=True)
 
+    if args.resume and os.path.isfile(args.resume):
+        print('Resuming from checkpoint (%s)' % args.resume)
+        state_dict, ob_rms = torch.load(args.resume, map_location='cpu')
+        actor_critic.load_state_dict(state_dict)
+
     actor_critic.to(device)
 
     if args.algo.startswith('a2c'):

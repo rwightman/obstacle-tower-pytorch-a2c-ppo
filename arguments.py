@@ -79,6 +79,7 @@ def get_args():
                         help='port to run the server on (default: 8097)')
     parser.add_argument('--no-norm', action='store_true', default=False,
                         help='disables normalization')
+    parser.add_argument('--resume', type=str, metavar='FILE', help='Pretrained model filename')
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
