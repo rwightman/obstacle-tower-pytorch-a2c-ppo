@@ -1,4 +1,3 @@
-from .model_pomm import PommNet
 from .model_generic import CNNBase, MLPBase
 from .policy import Policy
 
@@ -15,8 +14,6 @@ def create_policy(obs_space, action_space, name='basic', nn_kwargs={}, train=Tru
             nn = MLPBase(obs_shape[0], **nn_kwargs)
         else:
             raise NotImplementedError
-    elif name.lower() == 'pomm':
-        nn = PommNet(obs_shape=obs_shape, **nn_kwargs)
     else:
         assert False and "Invalid policy name"
 

@@ -28,9 +28,13 @@ parser.add_argument('--no-norm', action='store_true', default=False,
                     help='disables normalization')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA')
+parser.add_argument('--no-realtime', action='store_true', default=False,
+                    help='disables realtime mode and rendering for obt env')
+
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
+args.realtime = not args.no_realtime
 
 torch.set_num_threads(1)
 device = torch.device("cuda:0" if args.cuda else "cpu")
@@ -39,7 +43,7 @@ num_env = 1
 env = make_vec_envs(args.env_name, args.seed + 1000,
                     num_env, gamma=None, no_norm=args.no_norm,
                     num_stack=args.num_stack, log_dir=None, add_timestep=args.add_timestep,
-                    device=device, eval=True, allow_early_resets=False)
+                    device=device, eval=True, allow_early_resets=False, realtime=args.realtime)
 
 # Get a render function
 render_func = None
@@ -58,57 +62,47 @@ while True:
 # We need to use the same statistics for normalization as used in training
 state_dict, ob_rms = torch.load(args.load_path)
 
-# FIXME this is very specific to Pommerman env right now
+noisy_net = True
 actor_critic = create_policy(
     env.observation_space,
     env.action_space,
-    name='pomm',
+    name='basic',
     nn_kwargs={
-        #'conv': 'conv3',
-        'batch_norm': True,
-        'recurrent': args.recurrent_policy,
+        # 'batch_norm': False if args.algo == 'acktr' else True,
+        'recurrent': 'lstm' if args.recurrent_policy else '',
         'hidden_size': 512,
     },
+    noisy_net=noisy_net,
     train=False)
 
 actor_critic.load_state_dict(state_dict)
 actor_critic.to(device)
+actor_critic.eval()
 
-recurrent_hidden_states = torch.zeros(num_env, actor_critic.recurrent_hidden_state_size).to(device)
+recurrent_hidden_states = torch.zeros(2, num_env, actor_critic.recurrent_hidden_state_size).to(device)
 masks = torch.zeros(num_env, 1).to(device)
 
 obs = env.reset()
 
 if render_func is not None:
-    render_func('human')
+    render_func('human') # NOTE obstacle tower env uses realtime flag instead
 
-if args.env_name.find('Bullet') > -1:
-    import pybullet as p
-
-    torsoId = -1
-    for i in range(p.getNumBodies()):
-        if p.getBodyInfo(i)[0].decode() == "torso":
-            torsoId = i
-
+episode_reward = [0.] * num_env
 while True:
     with torch.no_grad():
         value, action, _, recurrent_hidden_states = actor_critic.act(
             obs, recurrent_hidden_states, masks, deterministic=True)
 
     obs, reward, done, _ = env.step(action)
+    for i, r in enumerate(reward):
+        episode_reward[i] += r
 
     masks = torch.tensor([[0.0] if done_ else [1.0] for done_ in done]).to(device)
 
-    if args.env_name.find('Bullet') > -1:
-        if torsoId > -1:
-            distance = 5
-            yaw = 0
-            humanPos, humanOrn = p.getBasePositionAndOrientation(torsoId)
-            p.resetDebugVisualizerCamera(distance, yaw, -20, humanPos)
-
     for i, d in enumerate(done):
         if d:
-            print(reward[i].item())
+            print('Episode reward for env:%d = %f' % (i, episode_reward[i]))
+            episode_reward[i] = 0.
 
     if render_func is not None:
         render_func('human')

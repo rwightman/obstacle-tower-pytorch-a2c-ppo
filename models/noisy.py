@@ -6,6 +6,7 @@ from torch.nn import functional as F
 
 
 class NoisyLinear(nn.Module):
+    # lifted from https://github.com/Kaixhin/Rainbow
     def __init__(self, in_features, out_features, std_init=0.1, factorized=False):
         super(NoisyLinear, self).__init__()
         self.in_features = in_features
